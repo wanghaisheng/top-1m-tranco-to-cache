@@ -1,4 +1,4 @@
-name: Process Tranco Rank Data (Weekly)
+name: cal Tranco Rank changes (Weekly)
 on:
   schedule:
     # Run every Monday at 5:00 AM UTC
