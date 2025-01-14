@@ -116,7 +116,7 @@ try {
                 insertDomain.run({domain});
                 domainIdMap.set(domain, id);
                  newDomainsCount++;
-                console.log(`Inserted new domain "${domain}" with id ${id}.`);
+                // console.log(`Inserted new domain "${domain}" with id ${id}.`);
             }
 
             const parsedRank = parseInt(rank)
