@@ -125,7 +125,7 @@ try {
               continue;
             }
              insertRank.run({id, rank: parsedRank, date: new Date().toISOString().split('T')[0]});
-             console.log(`Inserted rank: ${parsedRank} for domain "${domain}".`);
+             // console.log(`Inserted rank: ${parsedRank} for domain "${domain}".`);
         }
     })();
      console.log(`Database transaction completed successfully.`);
