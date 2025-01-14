@@ -1,0 +1,31 @@
+name: Save Rank Data
+on:
+  schedule:
+    # At 5am every day
+    - cron: 0 5 * * *
+  workflow_dispatch:
+
+jobs:
+  save-rank-data:
+    name: Save Rank Data
+    runs-on: ubuntu-latest
+    timeout-minutes: 15 # Increased timeout in case of big CSV.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 'latest'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install
+      - name: Download and Extract CSV
+        run: |
+          wget https://tranco-list.eu/top-1m.csv.zip || exit 1
+          unzip top-1m.csv.zip || exit 1
+          mv top-1m.csv data/persisted-to-cache/database.csv
+          rm top-1m.csv.zip # clean up zip file
+      - name: Update SQLite Database
+        run: pnpm tsx scripts/updateCsvDatabaseRecords.ts data/persisted-to-cache/database.csv
