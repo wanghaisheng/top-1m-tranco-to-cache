@@ -1,21 +1,40 @@
 import Database from 'better-sqlite3';
 import process from 'node:process';
 import { tableFromRecords } from '../util/table.js';
+import { writeFileSync } from 'node:fs';
+import { stringify } from 'csv/sync';
 
 const dbFilePath = 'data/database.db';
 const outputFilePath = 'data/top_changing_domains.csv';
-const topCount = 10000; // Top 10,000 domains
 
+const analysisType = process.argv[2];
 
-// Helper function to get date one week ago in YYYY-MM-DD format
-function getDateOneWeekAgo(): string {
-    const date = new Date();
-    date.setDate(date.getDate() - 7);
-    return date.toISOString().split('T')[0];
+if (!analysisType || (analysisType !== 'daily' && analysisType !== 'weekly')) {
+  console.error(`Usage:
+    pnpm tsx scripts/calculateRankChanges.ts daily
+    pnpm tsx scripts/calculateRankChanges.ts weekly
+`);
+  process.exit(1);
 }
 
+
+// Helper function to get date in YYYY-MM-DD format
+function getDate(daysAgo: number): string {
+    const date = new Date();
+    date.setDate(date.getDate() - daysAgo);
+    return date.toISOString().split('T')[0];
+}
 const db = new Database(dbFilePath);
-const oneWeekAgo = getDateOneWeekAgo();
+
+let analysisDays = 1;
+let topCount = 1000;
+let comparisonDate = getDate(analysisDays)
+
+if(analysisType === 'weekly') {
+  analysisDays = 7;
+    topCount = 10000;
+    comparisonDate = getDate(analysisDays);
+}
 
 
 const rankChanges = db
@@ -29,7 +48,7 @@ const rankChanges = db
                 GROUP BY ranks.id
         `
     )
-    .all(oneWeekAgo) as { id: number, rank_change: number}[];
+    .all(comparisonDate) as { id: number, rank_change: number}[];
 
 
 const domainIds = db
@@ -42,7 +61,6 @@ for (const { id, domain } of domainIds) {
     domainIdMap.set(id, domain)
 }
 
-
 const sortedRankChanges = rankChanges.sort((a, b) => b.rank_change - a.rank_change).slice(0, topCount)
 
 const topChangingDomains = sortedRankChanges.map(({id, rank_change}) => {
@@ -54,9 +72,6 @@ const topChangingDomains = sortedRankChanges.map(({id, rank_change}) => {
   };
 });
 
-
-import { writeFileSync } from 'node:fs';
-import { stringify } from 'csv/sync';
 // Write results to CSV
 try {
     writeFileSync(
@@ -70,7 +85,7 @@ try {
 
 
 console.log(
-  `Top ${topCount} domains with most rank change saved to: ${outputFilePath}`
+  `Top ${topCount} domains with most rank change (${analysisType}) saved to: ${outputFilePath}`
 );
 
 console.log(tableFromRecords(topChangingDomains));
