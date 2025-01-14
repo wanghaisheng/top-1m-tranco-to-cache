@@ -1,4 +1,4 @@
-name: Calculate Top Changing Domains
+name: Process Tranco Rank Data (Weekly)
 on:
   schedule:
     # Run every Monday at 5:00 AM UTC
@@ -6,10 +6,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  calculate-rank-changes:
-    name: Calculate Rank Changes
+  process-rank-data:
+    name: Process Rank Data
     runs-on: ubuntu-latest
-    timeout-minutes: 15 # increased timeout, in case of big data.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -21,12 +21,10 @@ jobs:
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install
-      - name: Update SQLite Database
-        run: pnpm tsx scripts/updateCsvDatabaseRecords.ts data/persisted-to-cache/database.csv
-      - name: Calculate Top Changing Domains
-        run: pnpm tsx scripts/calculateRankChanges.ts
+      - name: Calculate Top Changing Domains (Weekly)
+        run: pnpm tsx scripts/topchange-sqlite.ts w
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: top-changing-domains
+          name: top-changing-domains-weekly
           path: data/top_changing_domains.csv
