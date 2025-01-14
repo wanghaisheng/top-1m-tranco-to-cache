@@ -5,6 +5,12 @@ import { parse } from 'csv/sync';
 
 const inputFilePath = process.argv[2];
 const dbFilePath = 'data/database.db';
+function tableFromRecords(records) {
+    const headers = Object.keys(records[0] || {});
+    const rows = records.map(record => Object.values(record));
+    const table = [headers, ...rows].map(row => row.join('\t')).join('\n');
+    return table;
+}
 
 if (!inputFilePath) {
   console.error(`Input file path missing. Usage:
