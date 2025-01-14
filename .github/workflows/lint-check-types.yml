@@ -1,0 +1,36 @@
+name: Lint and Check Types
+on: push
+
+jobs:
+  lint-and-check-types:
+    name: Lint and Check Types
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 'latest'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install
+
+      # # Alternative for installing pnpm and dependencies with cache
+      # - run: npm i -g pnpm@${PNPM_VERSION}
+      # - id: get-store-path
+      #   run: echo STORE_PATH=$(pnpm store path) >> $GITHUB_OUTPUT
+      # - uses: actions/cache@v3
+      #   timeout-minutes: 5
+      #   id: cache-pnpm-store
+      #   with:
+      #     path: ${{ steps.get-store-path.outputs.STORE_PATH }}
+      #     key: pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+      #     restore-keys: |
+      #       pnpm-store-
+      #       pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - run: pnpm eslint . --max-warnings 0
+      - run: pnpm tsc

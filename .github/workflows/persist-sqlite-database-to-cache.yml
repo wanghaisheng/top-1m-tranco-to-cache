@@ -1,0 +1,35 @@
+name: Persist SQLite database to cache
+on:
+  schedule:
+    - cron: 0 5 * * 5
+  workflow_dispatch:
+jobs:
+  persist-sqlite-database-to-cache:
+    name: Persist SQLite database to cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PGHOST: localhost
+      PGDATABASE: upleveled
+      PGUSERNAME: upleveled
+      PGPASSWORD: upleveled
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 'latest'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install
+      - uses: actions/cache@v4
+        id: cache-sqlite-database
+        with:
+          path: data/persisted-to-cache/database.db
+          key: sqlite-database-${{ github.run_id }}
+          restore-keys: |
+            sqlite-database-
+            sqlite-database-${{ github.run_id }}
+      - run: pnpm tsx scripts/updateSqliteDatabaseRecords.ts data/persisted-to-cache/database.db

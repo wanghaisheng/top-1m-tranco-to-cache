@@ -1,0 +1,21 @@
+{
+  "name": "github-actions-database-persistence",
+  "version": "1.0.0",
+  "description": "GitHub Actions CRON workflow experiments with persisting CSV, SQLite and PostgreSQL databases to GitHub Actions cache and Git commits",
+  "license": "MIT",
+  "author": "Karl Horky",
+  "type": "module",
+  "dependencies": {
+    "better-sqlite3": "11.7.2",
+    "csv": "6.3.11",
+    "table": "6.9.0",
+    "tsx": "4.19.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.12",
+    "@types/node": "22.10.5",
+    "eslint-config-upleveled": "8.12.1",
+    "prettier": "3.4.2",
+    "typescript": "5.7.3"
+  }
+}
