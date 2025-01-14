@@ -9,7 +9,7 @@ jobs:
   process-rank-data:
     name: Process Rank Data
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     strategy:
       matrix:
         analysisType: [daily, weekly]
