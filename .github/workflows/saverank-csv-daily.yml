@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        analysisType: [daily, weekly]
+        analysisType: [daily]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
