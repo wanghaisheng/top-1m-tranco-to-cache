@@ -29,8 +29,13 @@ async function fetchAndParseSitemap(url: string): Promise<string[]> {
         const sitemapXml = response.data;
 
         const result = await parseStringPromise(sitemapXml);
-        const locTags: string[] = result.urlset.url.map((entry: any) => entry.loc[0]);
+        // Check if the expected <urlset> tag exists
+        if (!result.urlset || !result.urlset.url) {
+            console.error('Unexpected sitemap structure or missing <urlset> or <url> elements.');
+            return [];
+        }
 
+        const locTags: string[] = result.urlset.url.map((entry: any) => entry.loc[0]);
         console.log(`Extracted ${locTags.length} <loc> links from sitemap.`);
         return locTags;
     } catch (error) {
@@ -48,6 +53,12 @@ async function fetchAndParseGzip(url: string): Promise<AppData[]> {
         const fileContent = decompressed.toString('utf-8');
 
         const result = await parseStringPromise(fileContent);
+        // Ensure the expected structure exists
+        if (!result.urlset || !result.urlset.url) {
+            console.error('Unexpected sitemap structure or missing <urlset> or <url> elements.');
+            return [];
+        }
+
         const locTags: string[] = result.urlset.url.map((entry: any) => entry.loc[0]);
         const lastmodTags: string[] = result.urlset.url.map((entry: any) => entry.lastmod[0]);
 
@@ -90,6 +101,7 @@ async function fetchSubSitemapFromIndex(url: string): Promise<string[]> {
             const sitemapXml = response.data;
 
             const result = await parseStringPromise(sitemapXml);
+            // Ensure the expected <sitemapindex> tag exists
             if (!result.sitemapindex || !result.sitemapindex.sitemap) {
                 console.error("The expected <sitemapindex> or <sitemap> elements are missing.");
                 return [];
