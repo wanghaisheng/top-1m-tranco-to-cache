@@ -12,16 +12,27 @@ jobs:
       matrix:
         analysisType: [daily]
     steps:
-      - uses: actions/checkout@v4
+      # Checkout your own repository where the script is located
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+
+      # Clone the third-party repository (adysec/top_1m_domains) to access the ZIP files
+      - name: Clone third-party repository (adysec/top_1m_domains)
+        run: |
+          git clone https://github.com/adysec/top_1m_domains.git
+          
       - uses: pnpm/action-setup@v4
         with:
           version: 'latest'
+
       - uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
           cache: 'pnpm'
+
       - name: Install dependencies
         run: pnpm install
+
       - name: Download and Extract CSV from Commits
         if: matrix.analysisType == 'daily' # Only download once a day
         run: |
@@ -32,6 +43,7 @@ jobs:
           mkdir -p data/persisted-to-cache
 
           # Get all commits since the specified date
+          cd top_1m_domains
           git log --since=$START_DATE --format="%H" > commit_hashes.txt
 
           # Loop through each commit hash and download the file
@@ -41,14 +53,14 @@ jobs:
             # Checkout the commit
             git checkout $commit_hash
             
-            # Download the zip file
+            # Download the zip file from the third-party repository
             wget -O tranco.zip https://github.com/adysec/top_1m_domains/raw/$commit_hash/tranco.zip
             
             # Unzip and rename the file based on the commit date
-            unzip tranco.zip -d data/persisted-to-cache || exit 1
+            unzip tranco.zip -d ../data/persisted-to-cache || exit 1
             commit_date=$(git log -1 --format=%cs $commit_hash)
-            for csvfile in data/persisted-to-cache/*.csv; do
-              mv "$csvfile" "data/persisted-to-cache/${commit_date}.csv"
+            for csvfile in ../data/persisted-to-cache/*.csv; do
+              mv "$csvfile" "../data/persisted-to-cache/${commit_date}.csv"
             done
 
             # Clean up zip file
@@ -57,10 +69,7 @@ jobs:
 
           # Reset repository to the latest state
           git reset --hard HEAD
+          
       - name: Save Rank Data to SQLite
         if: matrix.analysisType == 'daily' # Only save once a day.
-        # run: pnpm tsx scripts/savehistoricaltranco.ts data/persisted-to-cache/*.csv
-        # CLEAR_DB=true pnpm tsx scripts/saveranktocache-sqlite.ts data/persisted-to-cache/*.csv
-
         run: pnpm tsx scripts/savehistoricaltranco.ts $(ls data/persisted-to-cache/*.csv | head -n 3)
-        
