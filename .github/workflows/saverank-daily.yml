@@ -30,14 +30,7 @@ jobs:
           wget https://tranco-list.eu/top-1m.csv.zip || exit 1
           unzip top-1m.csv.zip || exit 1
           mv top-1m.csv data/persisted-to-cache/database.csv
-          rm top-1m.csv.zip # clean up zip file
+          rm top-1m.csv.zip
       - name: Save Rank Data to SQLite
         if: matrix.analysisType == 'daily' # Only save once a day.
         run: pnpm tsx scripts/saveranktocache-sqlite.ts data/persisted-to-cache/database.csv
-      # - name: Calculate Top Changing Domains
-        # run: pnpm tsx scripts/topchange-sqlite.ts ${{ matrix.analysisType }}
-      # - name: Upload Artifact
-        # uses: actions/upload-artifact@v4
-        # with:
-          # name: top-changing-domains-${{ matrix.analysisType }}
-          # path: data/top_changing_domains.csv
