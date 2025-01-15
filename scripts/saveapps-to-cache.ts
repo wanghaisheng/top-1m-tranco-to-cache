@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import { parse } from 'csv/sync';
 
 const inputFilePath = process.argv[2];
-const dbFilePath = 'data/iossitemapappsdatabase.db';
+const dbFilePath = 'data/persisted-to-cache/iossitemapappsdatabase.db';
 function tableFromRecords(records) {
     const headers = Object.keys(records[0] || {});
     const rows = records.map(record => Object.values(record));
