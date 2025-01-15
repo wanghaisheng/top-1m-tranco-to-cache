@@ -64,7 +64,7 @@ async function fetchAndParseGzip(url: string): Promise<AppData[]> {
 
         const appDataList = locTags.map((loc, index) => ({
             url: loc,
-            lastmodify: lastmodTags[index]
+            lastmodify: lastmodTags[index] || format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx") // Use current date if missing
         }));
 
         console.log(`Extracted ${appDataList.length} app data entries from GZipped sitemap.`);
