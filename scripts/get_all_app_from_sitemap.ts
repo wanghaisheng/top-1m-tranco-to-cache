@@ -21,6 +21,7 @@ interface AppData {
     lastmodify: string;
 }
 
+// Fetch and parse sitemap, return array of URLs found in <loc> tags
 async function fetchAndParseSitemap(url: string): Promise<string[]> {
     try {
         console.log(`Fetching sitemap from URL: ${url}`);
@@ -38,6 +39,7 @@ async function fetchAndParseSitemap(url: string): Promise<string[]> {
     }
 }
 
+// Fetch and parse GZipped sitemap, return an array of AppData objects
 async function fetchAndParseGzip(url: string): Promise<AppData[]> {
     try {
         console.log(`Fetching GZipped sitemap from URL: ${url}`);
@@ -62,6 +64,7 @@ async function fetchAndParseGzip(url: string): Promise<AppData[]> {
     }
 }
 
+// Save data to CSV
 function saveToCsv(appDataList: AppData[], filename: string): void {
     const csvContent = appDataList.map(appData => `${appData.url},${appData.lastmodify}`).join('\n');
 
@@ -76,18 +79,62 @@ function saveToCsv(appDataList: AppData[], filename: string): void {
     console.log(`Data saved to ${directory}/${filename}`);
 }
 
+// Method to handle sub-sitemaps from an index
+async function fetchSubSitemapFromIndex(url: string): Promise<string[]> {
+    try {
+        // Check if the URL contains the "index" keyword
+        if (url.includes("index")) {
+            console.log(`Fetching sub-sitemap from URL containing "index": ${url}`);
+            
+            const response = await axios.get(url);
+            const sitemapXml = response.data;
+
+            const result = await parseStringPromise(sitemapXml);
+            if (!result.sitemapindex || !result.sitemapindex.sitemap) {
+                console.error("The expected <sitemapindex> or <sitemap> elements are missing.");
+                return [];
+            }
+
+            // Extract all <loc> elements pointing to sub-sitemaps
+            const subSitemapUrls: string[] = result.sitemapindex.sitemap.map((entry: any) => entry.loc[0]);
+            console.log(`Extracted ${subSitemapUrls.length} sub-sitemap URLs from sitemap index.`);
+            return subSitemapUrls;
+        } else {
+            console.log(`No "index" keyword in the URL: ${url}`);
+            return [];
+        }
+    } catch (error) {
+        console.error(`Failed to fetch or parse sitemap index containing "index": ${error} - URL: ${url}`);
+        return [];
+    }
+}
+
+// Main function to process sitemaps and save data
 async function processSitemapsAndSaveProfiles(): Promise<void> {
-    const sitemapUrl = "https://apps.apple.com/sitemaps_apps_index_app_1.xml";
+    const sitemapUrl = "https://apps.apple.com/sitemaps_apps_index_app_1.xml";  // Starting point
 
     const locUrls = await fetchAndParseSitemap(sitemapUrl);
 
     for (const locUrl of locUrls) {
         console.log(`Processing sitemap: ${locUrl}`);
-        const appDataList = await fetchAndParseGzip(locUrl);
+        
+        // Check if the sitemap URL contains "index" and handle it
+        const subSitemapUrls = await fetchSubSitemapFromIndex(locUrl);
 
-        // Save data to the specified path (data/persisted-to-cache/database.csv)
-        saveToCsv(appDataList, 'database.csv');
+        if (subSitemapUrls.length > 0) {
+            // If sub-sitemaps were found, process them
+            for (const subSitemapUrl of subSitemapUrls) {
+                console.log(`Processing sub-sitemap: ${subSitemapUrl}`);
+                const appDataList = await fetchAndParseGzip(subSitemapUrl);
+                saveToCsv(appDataList, 'database.csv');
+            }
+        } else {
+            // If no sub-sitemaps were found, directly process the main sitemap
+            const appDataList = await fetchAndParseGzip(locUrl);
+            saveToCsv(appDataList, 'database.csv');
+        }
     }
 }
 
+// Run the process
 processSitemapsAndSaveProfiles();
