@@ -1,18 +1,18 @@
-name: save sitemap allapps daily
+name: save all app SQLite database to cache
 on:
   schedule:
-    # At 5am every day (for daily analysis)
     - cron: 0 5 * * *
   workflow_dispatch:
-
 jobs:
-  process-rank-data:
-    name: Process Rank Data
+  persist-sqlite-database-to-cache:
+    name: Persist SQLite database to cache
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      matrix:
-        analysisType: [daily]
+    timeout-minutes: 10
+    env:
+      PGHOST: localhost
+      PGDATABASE: upleveled
+      PGUSERNAME: upleveled
+      PGPASSWORD: upleveled
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -23,16 +23,15 @@ jobs:
           node-version: 'lts/*'
           cache: 'pnpm'
       - name: Install dependencies
-        run: pnpm  install axios xml2js dotenv fs zlib util
-      - name: Save Rank Data to SQLite
-        if: matrix.analysisType == 'daily' # Only save once a day.
-        run: |
+        run: pnpm install
+      - uses: actions/cache@v4
+        id: cache-sqlite-database
+        with:
+          path: data/persisted-to-cache/iossitemapappsdatabase.db
+          key: sqlite-database-${{ github.run_id }}
+          restore-keys: |
+            sqlite-database-
+            sqlite-database-${{ github.run_id }}
+      - run: |
           pnpm tsx scripts/get_all_app_from_sitemap.ts
           pnpm tsx scripts/saveapps-to-cache.ts data/persisted-to-cache/database.csv
-      # - name: Calculate Top Changing Domains
-        # run: pnpm tsx scripts/topchange-sqlite.ts ${{ matrix.analysisType }}
-      # - name: Upload Artifact
-        # uses: actions/upload-artifact@v4
-        # with:
-          # name: top-changing-domains-${{ matrix.analysisType }}
-          # path: data/top_changing_domains.csv
