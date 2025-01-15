@@ -125,7 +125,7 @@ async function fetchSubSitemapFromIndex(url: string): Promise<string[]> {
 async function processSitemapsAndSaveProfiles(): Promise<void> {
     const sitemapUrl = "https://apps.apple.com/sitemaps_apps_index_app_1.xml";  // Starting point
 
-    const locUrls = await fetchAndParseSitemap(sitemapUrl);
+    const locUrls = await fetchSubSitemapFromIndex(sitemapUrl);
 
     for (const locUrl of locUrls) {
         console.log(`Processing sitemap: ${locUrl}`);
