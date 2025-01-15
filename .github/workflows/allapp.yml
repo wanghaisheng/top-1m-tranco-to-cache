@@ -1,0 +1,38 @@
+name: save sitemap allapps daily
+on:
+  schedule:
+    # At 5am every day (for daily analysis)
+    - cron: 0 5 * * *
+  workflow_dispatch:
+
+jobs:
+  process-rank-data:
+    name: Process Rank Data
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        analysisType: [daily]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 'latest'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm  install axios xml2js dotenv fs zlib util
+      - name: Save Rank Data to SQLite
+        if: matrix.analysisType == 'daily' # Only save once a day.
+        run: |
+          pnpm tsx get_all_app_from_sitemap.ts
+          pnpm tsx scripts/saveapps-to-cache.ts data/persisted-to-cache/database.csv
+      # - name: Calculate Top Changing Domains
+        # run: pnpm tsx scripts/topchange-sqlite.ts ${{ matrix.analysisType }}
+      # - name: Upload Artifact
+        # uses: actions/upload-artifact@v4
+        # with:
+          # name: top-changing-domains-${{ matrix.analysisType }}
+          # path: data/top_changing_domains.csv
