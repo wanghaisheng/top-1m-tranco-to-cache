@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as zlib from 'zlib';
 import * as dotenv from 'dotenv';
 import { promisify } from 'util';
+import { format } from 'date-fns'; // Ensure date-fns is installed
 
 dotenv.config();
 
@@ -29,7 +30,6 @@ async function fetchAndParseSitemap(url: string): Promise<string[]> {
         const sitemapXml = response.data;
 
         const result = await parseStringPromise(sitemapXml);
-        // Check if the expected <urlset> tag exists
         if (!result.urlset || !result.urlset.url) {
             console.error('Unexpected sitemap structure or missing <urlset> or <url> elements.');
             return [];
@@ -53,18 +53,17 @@ async function fetchAndParseGzip(url: string): Promise<AppData[]> {
         const fileContent = decompressed.toString('utf-8');
 
         const result = await parseStringPromise(fileContent);
-        // Ensure the expected structure exists
         if (!result.urlset || !result.urlset.url) {
             console.error('Unexpected sitemap structure or missing <urlset> or <url> elements.');
             return [];
         }
 
         const locTags: string[] = result.urlset.url.map((entry: any) => entry.loc[0]);
-        const lastmodTags: string[] = result.urlset.url.map((entry: any) => entry.lastmod[0]);
+        const lastmodTags: string[] = result.urlset.url.map((entry: any) => entry.lastmod?.[0] || format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx"));
 
         const appDataList = locTags.map((loc, index) => ({
             url: loc,
-            lastmodify: lastmodTags[index] || format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx") // Use current date if missing
+            lastmodify: lastmodTags[index]
         }));
 
         console.log(`Extracted ${appDataList.length} app data entries from GZipped sitemap.`);
@@ -79,13 +78,11 @@ async function fetchAndParseGzip(url: string): Promise<AppData[]> {
 function saveToCsv(appDataList: AppData[], filename: string): void {
     const csvContent = appDataList.map(appData => `${appData.url},${appData.lastmodify}`).join('\n');
 
-    // Ensure the directory exists
     const directory = 'data/persisted-to-cache';
     if (!fs.existsSync(directory)) {
         fs.mkdirSync(directory, { recursive: true });
     }
 
-    // Save the CSV file to the specified path
     fs.writeFileSync(`${directory}/${filename}`, csvContent);
     console.log(`Data saved to ${directory}/${filename}`);
 }
@@ -93,21 +90,17 @@ function saveToCsv(appDataList: AppData[], filename: string): void {
 // Method to handle sub-sitemaps from an index
 async function fetchSubSitemapFromIndex(url: string): Promise<string[]> {
     try {
-        // Check if the URL contains the "index" keyword
         if (url.includes("index")) {
             console.log(`Fetching sub-sitemap from URL containing "index": ${url}`);
-            
             const response = await axios.get(url);
             const sitemapXml = response.data;
 
             const result = await parseStringPromise(sitemapXml);
-            // Ensure the expected <sitemapindex> tag exists
             if (!result.sitemapindex || !result.sitemapindex.sitemap) {
                 console.error("The expected <sitemapindex> or <sitemap> elements are missing.");
                 return [];
             }
 
-            // Extract all <loc> elements pointing to sub-sitemaps
             const subSitemapUrls: string[] = result.sitemapindex.sitemap.map((entry: any) => entry.loc[0]);
             console.log(`Extracted ${subSitemapUrls.length} sub-sitemap URLs from sitemap index.`);
             return subSitemapUrls;
@@ -124,28 +117,26 @@ async function fetchSubSitemapFromIndex(url: string): Promise<string[]> {
 // Main function to process sitemaps and save data
 async function processSitemapsAndSaveProfiles(): Promise<void> {
     const sitemapUrl = "https://apps.apple.com/sitemaps_apps_index_app_1.xml";  // Starting point
+    let totalAppDataList: AppData[] = [];
 
     const locUrls = await fetchSubSitemapFromIndex(sitemapUrl);
-
     for (const locUrl of locUrls) {
         console.log(`Processing sitemap: ${locUrl}`);
-        
-        // Check if the sitemap URL contains "index" and handle it
+
         const subSitemapUrls = await fetchSubSitemapFromIndex(locUrl);
 
         if (subSitemapUrls.length > 0) {
-            // If sub-sitemaps were found, process them
             for (const subSitemapUrl of subSitemapUrls) {
                 console.log(`Processing sub-sitemap: ${subSitemapUrl}`);
                 const appDataList = await fetchAndParseGzip(subSitemapUrl);
-                saveToCsv(appDataList, 'database.csv');
+                totalAppDataList = totalAppDataList.concat(appDataList);
             }
         } else {
-            // If no sub-sitemaps were found, directly process the main sitemap
             const appDataList = await fetchAndParseGzip(locUrl);
-            saveToCsv(appDataList, 'database.csv');
+            totalAppDataList = totalAppDataList.concat(appDataList);
         }
     }
+    saveToCsv(totalAppDataList, 'database.csv');
 }
 
 // Run the process
