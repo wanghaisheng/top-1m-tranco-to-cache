@@ -1,0 +1,65 @@
+name: Save Tranco Rank Daily
+
+on:
+  schedule:
+    # At 5am every day (for daily analysis)
+    - cron: 0 5 * * *
+  workflow_dispatch:
+
+jobs:
+  process-rank-data:
+    name: Process Rank Data
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        analysisType: [daily]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 'latest'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install
+      - name: Download and Extract CSV from Commits
+        if: matrix.analysisType == 'daily' # Only download once a day
+        run: |
+          # Define start date
+          START_DATE="2024-06-01"
+
+          # Create directory for downloaded files
+          mkdir -p data/persisted-to-cache
+
+          # Get all commits since the specified date
+          git log --since=$START_DATE --format="%H" > commit_hashes.txt
+
+          # Loop through each commit hash and download the file
+          while read commit_hash; do
+            echo "Processing commit: $commit_hash"
+            
+            # Checkout the commit
+            git checkout $commit_hash
+            
+            # Download the zip file
+            wget -O tranco.zip https://github.com/adysec/top_1m_domains/raw/$commit_hash/tranco.zip
+            
+            # Unzip and rename the file based on the commit date
+            unzip tranco.zip -d data/persisted-to-cache || exit 1
+            commit_date=$(git log -1 --format=%cs $commit_hash)
+            for csvfile in data/persisted-to-cache/*.csv; do
+              mv "$csvfile" "data/persisted-to-cache/${commit_date}.csv"
+            done
+
+            # Clean up zip file
+            rm tranco.zip
+          done < commit_hashes.txt
+
+          # Reset repository to the latest state
+          git reset --hard HEAD
+      - name: Save Rank Data to SQLite
+        if: matrix.analysisType == 'daily' # Only save once a day.
+        run: pnpm tsx scripts/savehistoricaltranco.ts data/persisted-to-cache/*.csv
