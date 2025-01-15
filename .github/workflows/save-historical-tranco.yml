@@ -62,4 +62,6 @@ jobs:
           git reset --hard HEAD
       - name: Save Rank Data to SQLite
         if: matrix.analysisType == 'daily' # Only save once a day.
-        run: pnpm tsx scripts/savehistoricaltranco.ts data/persisted-to-cache/*.csv
+        # run: pnpm tsx scripts/savehistoricaltranco.ts data/persisted-to-cache/*.csv
+        run: pnpm tsx scripts/saveranktocache-sqlite.ts $(ls data/persisted-to-cache/*.csv | head -n 3)
+        
