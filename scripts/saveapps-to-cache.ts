@@ -97,15 +97,18 @@ try {
     console.log(`Reading input CSV from ${inputFilePath}...`);
     newDomainRankPairs = parse(readFileSync(inputFilePath, 'utf-8'), {
         columns: true,
-    }).map((row: { url: string, lastmodify: string }) => ({ url: row.url, lastmodify: row.lastmodify }));
+        skip_empty_lines: true
+    }).map((row: { url: string, lastmodify: string }) => {
+        // Ensure consistent date formatting for lastmodify
+        const lastmodify = row.lastmodify || new Date().toISOString().split('T')[0];
+        return { url: row.url, lastmodify };
+    });
     console.log(`Read ${newDomainRankPairs.length} new domain/lastmodify pairs from CSV.`);
 } catch (err) {
-    console.error(
-        `Error reading or parsing input CSV: ${inputFilePath}\n`,
-        err
-    );
+    console.error(`Error reading or parsing input CSV: ${inputFilePath}`, err);
     process.exit(1);
 }
+
 
 let newDomainsCount = 0;
 
