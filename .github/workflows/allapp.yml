@@ -27,7 +27,7 @@ jobs:
       - name: Save Rank Data to SQLite
         if: matrix.analysisType == 'daily' # Only save once a day.
         run: |
-          pnpm tsx get_all_app_from_sitemap.ts
+          pnpm tsx scripts/get_all_app_from_sitemap.ts
           pnpm tsx scripts/saveapps-to-cache.ts data/persisted-to-cache/database.csv
       # - name: Calculate Top Changing Domains
         # run: pnpm tsx scripts/topchange-sqlite.ts ${{ matrix.analysisType }}
