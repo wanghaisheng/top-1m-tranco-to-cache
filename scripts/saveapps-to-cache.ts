@@ -1,93 +1,143 @@
-import axios from 'axios';
-import { parseStringPromise } from 'xml2js';
-import * as fs from 'fs';
-import * as zlib from 'zlib';
-import * as dotenv from 'dotenv';
-import { promisify } from 'util';
+import { readFileSync, existsSync } from 'node:fs';
+import process from 'node:process';
+import Database from 'better-sqlite3';
+import { parse } from 'csv/sync';
 
-dotenv.config();
-
-const D1_DATABASE_ID = process.env.D1_APP_DATABASE_ID;
-const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
-const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
-
-const CLOUDFLARE_BASE_URL = `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${D1_DATABASE_ID}`;
-
-// Set up gunzip for decompressing
-const gunzip = promisify(zlib.gunzip);
-
-interface AppData {
-    url: string;
-    lastmodify: string;
+const inputFilePath = process.argv[2];
+const dbFilePath = 'data/database.db';
+function tableFromRecords(records) {
+    const headers = Object.keys(records[0] || {});
+    const rows = records.map(record => Object.values(record));
+    const table = [headers, ...rows].map(row => row.join('\t')).join('\n');
+    return table;
 }
 
-async function fetchAndParseSitemap(url: string): Promise<string[]> {
-    try {
-        console.log(`Fetching sitemap from URL: ${url}`);
-        const response = await axios.get(url);
-        const sitemapXml = response.data;
+if (!inputFilePath) {
+  console.error(`Input file path missing. Usage:
+  $ pnpm tsx scripts/saveRankData.ts data/persisted-to-cache/database.csv
+`);
+  process.exit(1);
+}
 
-        const result = await parseStringPromise(sitemapXml);
-        const locTags: string[] = result.urlset.url.map((entry: any) => entry.loc[0]);
+console.log(`Starting saveRankData script with input CSV: ${inputFilePath}`);
 
-        console.log(`Extracted ${locTags.length} <loc> links from sitemap.`);
-        return locTags;
-    } catch (error) {
-        console.error(`Failed to fetch or parse sitemap: ${error} - URL: ${url}`);
-        return [];
+const db = new Database(dbFilePath);
+db.pragma('journal_mode = WAL');
+
+console.log(`Database opened at ${dbFilePath}`);
+
+// Create tables if not exists
+try {
+    console.log("Creating tables if not exists...");
+    db.prepare(
+        `
+        CREATE TABLE IF NOT EXISTS domains (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT UNIQUE NOT NULL
+        )
+        `
+    ).run();
+    console.log("Domains table created/verified.");
+
+    db.prepare(
+        `
+        CREATE TABLE IF NOT EXISTS ranks (
+            id INTEGER NOT NULL,
+            lastmodify TEXT NOT NULL,
+            date TEXT NOT NULL,
+            FOREIGN KEY (id) REFERENCES domains(id)
+        )
+        `
+    ).run();
+    console.log("Ranks table created/verified.");
+
+} catch (error) {
+    console.error(`Error creating tables:`, error);
+    process.exit(1);
+}
+
+// Load domain IDs from db
+const domainIdMap = new Map<string, number>();
+let maxId = 0;
+
+try {
+    console.log("Loading existing domain IDs from database...");
+    const domainIdRecords = db
+        .prepare("SELECT id, url FROM domains")
+        .all() as { id: number, url: string }[];
+    for(const {id, url} of domainIdRecords) {
+        domainIdMap.set(url, id);
     }
+    maxId = Math.max(0, ...domainIdRecords.map(record => record.id));
+    console.log(`Loaded ${domainIdRecords.length} domain IDs.`);
+} catch (error) {
+    console.error(`Error loading domain IDs from database`, error);
+    process.exit(1);
 }
 
-async function fetchAndParseGzip(url: string): Promise<AppData[]> {
-    try {
-        console.log(`Fetching GZipped sitemap from URL: ${url}`);
-        const response = await axios.get(url, { responseType: 'arraybuffer' });
-        const decompressed = await gunzip(Buffer.from(response.data));
-        const fileContent = decompressed.toString('utf-8');
+// Insert new domain, rank pairs into database
+const insertDomain = db.prepare(
+  `
+    INSERT OR IGNORE INTO domains (url)
+    VALUES (@url)
+  `
+);
 
-        const result = await parseStringPromise(fileContent);
-        const locTags: string[] = result.urlset.url.map((entry: any) => entry.loc[0]);
-        const lastmodTags: string[] = result.urlset.url.map((entry: any) => entry.lastmod[0]);
+const insertRank = db.prepare(
+    `
+        INSERT INTO ranks (id, lastmodify, date)
+        VALUES (@id, @lastmodify, @date)
+    `
+);
 
-        const appDataList = locTags.map((loc, index) => ({
-            url: loc,
-            lastmodify: lastmodTags[index]
-        }));
+// Parse new domain, lastmodify pairs from input
+let newDomainRankPairs: { lastmodify: string; url: string }[] = [];
 
-        console.log(`Extracted ${appDataList.length} app data entries from GZipped sitemap.`);
-        return appDataList;
-    } catch (error) {
-        console.error(`Failed to fetch or parse GZipped sitemap: ${error} - URL: ${url}`);
-        return [];
-    }
+try {
+    console.log(`Reading input CSV from ${inputFilePath}...`);
+    newDomainRankPairs = parse(readFileSync(inputFilePath, 'utf-8'), {
+        columns: true,
+    }).map((row: { url: string, lastmodify: string }) => ({ url: row.url, lastmodify: row.lastmodify }));
+    console.log(`Read ${newDomainRankPairs.length} new domain/lastmodify pairs from CSV.`);
+} catch (err) {
+    console.error(
+        `Error reading or parsing input CSV: ${inputFilePath}\n`,
+        err
+    );
+    process.exit(1);
 }
 
-function saveToCsv(appDataList: AppData[], filename: string): void {
-    const csvContent = appDataList.map(appData => `${appData.url},${appData.lastmodify}`).join('\n');
+let newDomainsCount = 0;
 
-    // Ensure the directory exists
-    const directory = 'data/persisted-to-cache';
-    if (!fs.existsSync(directory)) {
-        fs.mkdirSync(directory, { recursive: true });
-    }
+try {
+    console.log(`Starting database transaction...`);
+    db.transaction(() => {
+        for (const { lastmodify, url } of newDomainRankPairs) {
+            let id = domainIdMap.get(url);
+            if(id === undefined) {
+                maxId++;
+                id = maxId;
+                insertDomain.run({url});
+                domainIdMap.set(url, id);
+                newDomainsCount++;
+            }
 
-    // Save the CSV file to the specified path
-    fs.writeFileSync(`${directory}/${filename}`, csvContent);
-    console.log(`Data saved to ${directory}/${filename}`);
+            insertRank.run({id, lastmodify, date: new Date().toISOString().split('T')[0]});
+        }
+    })();
+    console.log(`Database transaction completed successfully.`);
+} catch (error) {
+    console.error("Error processing database transaction", error);
+    process.exit(1);
 }
 
-async function processSitemapsAndSaveProfiles(): Promise<void> {
-    const sitemapUrl = "https://apps.apple.com/sitemaps_apps_index_app_1.xml";
+const newDomains = newDomainRankPairs.filter(({url}) => !domainIdMap.has(url));
 
-    const locUrls = await fetchAndParseSitemap(sitemapUrl);
+console.log(`Updated ${dbFilePath}:
+- ${newDomainsCount} new domains added
+- ${newDomainRankPairs.length} new rank records added
+`);
 
-    for (const locUrl of locUrls) {
-        console.log(`Processing sitemap: ${locUrl}`);
-        const appDataList = await fetchAndParseGzip(locUrl);
-
-        // Save data to the specified path (data/persisted-to-cache/database.csv)
-        saveToCsv(appDataList, 'database.csv');
-    }
-}
-
-processSitemapsAndSaveProfiles();
+console.log("First 100 domain IDs");
+console.log(tableFromRecords([...domainIdMap.entries()].slice(0,100).map(([url, id]) => ({url, id}))));
+console.log("Finished saveRankData script.");
