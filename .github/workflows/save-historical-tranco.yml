@@ -63,5 +63,7 @@ jobs:
       - name: Save Rank Data to SQLite
         if: matrix.analysisType == 'daily' # Only save once a day.
         # run: pnpm tsx scripts/savehistoricaltranco.ts data/persisted-to-cache/*.csv
-        run: pnpm tsx scripts/saveranktocache-sqlite.ts $(ls data/persisted-to-cache/*.csv | head -n 3)
+        # CLEAR_DB=true pnpm tsx scripts/saveranktocache-sqlite.ts data/persisted-to-cache/*.csv
+
+        run: pnpm tsx scripts/savehistoricaltranco.ts $(ls data/persisted-to-cache/*.csv | head -n 3)
         
