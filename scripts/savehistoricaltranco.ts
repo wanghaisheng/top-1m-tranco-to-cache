@@ -9,7 +9,6 @@ const dbFilePath = 'data/database.db';
 
 function extractDateFromFilename(filename) {
     const baseName = path.basename(filename, '.csv');
-    // Assuming the format is "YYYY-MM-DD"
     const dateMatch = baseName.match(/\d{4}-\d{2}-\d{2}/);
     return dateMatch ? dateMatch[0] : null;
 }
@@ -22,10 +21,10 @@ function tableFromRecords(records) {
 }
 
 if (!inputFilePath) {
-  console.error(`Input file path missing. Usage:
-  $ pnpm tsx scripts/saveRankData.ts data/persisted-to-cache/database.csv
-`);
-  process.exit(1);
+    console.error(`Input file path missing. Usage:
+    $ pnpm tsx scripts/saveRankData.ts data/persisted-to-cache/YYYY-MM-DD.csv
+    `);
+    process.exit(1);
 }
 
 const dateFromFilename = extractDateFromFilename(inputFilePath);
@@ -46,26 +45,22 @@ console.log(`Database opened at ${dbFilePath}`);
 // Create tables if not exists
 try {
     console.log("Creating tables if not exists...");
-    db.prepare(
-        `
+    db.prepare(`
         CREATE TABLE IF NOT EXISTS domains (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             domain TEXT UNIQUE NOT NULL
         )
-        `
-    ).run();
+    `).run();
     console.log("Domains table created/verified.");
 
-    db.prepare(
-        `
+    db.prepare(`
         CREATE TABLE IF NOT EXISTS ranks (
             id INTEGER NOT NULL,
             rank INTEGER NOT NULL,
             date TEXT NOT NULL,
             FOREIGN KEY (id) REFERENCES domains(id)
         )
-        `
-    ).run();
+    `).run();
     console.log("Ranks table created/verified.");
 
 } catch (error) {
@@ -74,14 +69,12 @@ try {
 }
 
 // Load domain IDs from db
-const domainIdMap = new Map<string, number>();
+const domainIdMap = new Map();
 let maxId = 0;
 
 try {
     console.log("Loading existing domain IDs from database...");
-    const domainIdRecords = db
-        .prepare("SELECT id, domain FROM domains")
-        .all() as { id: number, domain: string }[];
+    const domainIdRecords = db.prepare("SELECT id, domain FROM domains").all();
     for (const { id, domain } of domainIdRecords) {
         domainIdMap.set(domain, id);
     }
@@ -93,28 +86,22 @@ try {
 }
 
 // Insert new domain, rank pairs into database
-const insertDomain = db.prepare(
-  `
+const insertDomain = db.prepare(`
     INSERT OR IGNORE INTO domains (domain)
     VALUES (@domain)
-  `
-);
+`);
 
-const insertRank = db.prepare(
-    `
-        INSERT INTO ranks (id, rank, date)
-        VALUES (@id, @rank, @date)
-    `
-);
+const insertRank = db.prepare(`
+    INSERT INTO ranks (id, rank, date)
+    VALUES (@id, @rank, @date)
+`);
 
-// Parse new domain, rank pairs from input
-let newDomainRankPairs: { rank: string; domain: string }[] = [];
+let newDomainRankPairs = [];
 
 try {
     console.log(`Reading input CSV from ${inputFilePath}...`);
-    newDomainRankPairs = parse(readFileSync(inputFilePath, 'utf-8'), {
-        columns: false,
-    }).map((row: string[]) => ({ rank: row[0], domain: row[1] }));
+    newDomainRankPairs = parse(readFileSync(inputFilePath, 'utf-8'), { columns: false })
+        .map(row => ({ rank: row[0], domain: row[1] }));
     console.log(`Read ${newDomainRankPairs.length} new domain/rank pairs from CSV.`);
 } catch (err) {
     console.error(`Error reading or parsing input CSV: ${inputFilePath}\n`, err);
