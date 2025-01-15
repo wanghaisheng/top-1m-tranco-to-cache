@@ -1,0 +1,70 @@
+name: Save historical Tranco Rank1sa
+
+on:
+  workflow_dispatch:
+
+jobs:
+  process-rank-data:
+    name: Process Rank Data
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        analysisType: [daily]
+    steps:
+      # Checkout your own repository where the script is located
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+
+      # Clone the third-party repository (adysec/top_1m_domains) to access the ZIP files
+      - name: Clone third-party repository (adysec/top_1m_domains)
+        run: |
+          git clone https://github.com/adysec/top_1m_domains.git
+          
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 'latest'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Process Historical Data
+        run: |
+          # Define start date
+          START_DATE="2024-07-01"
+
+          # Create directory for downloaded files
+          mkdir -p data/persisted-to-cache
+
+          # Navigate to the cloned repository
+          cd top_1m_domains
+          
+          # Get all commits since the specified date
+          git log --since=$START_DATE --format="%H" > commit_hashes.txt
+
+          # Loop through each commit hash and process the data
+          while read commit_hash; do
+            echo "Processing commit: $commit_hash"
+            
+            # Checkout the commit
+            git checkout $commit_hash
+            
+            # Extract the commit date from date.txt
+            commit_date=$(cat date.txt)
+
+            # Move the CSV file to the target directory
+            cp data/persisted-to-cache/*.csv ../data/persisted-to-cache/${commit_date}.csv
+
+          done < commit_hashes.txt
+
+          # Reset repository to the latest state
+          git reset --hard HEAD
+          
+      - name: Save Rank Data to SQLite
+        if: matrix.analysisType == 'daily'
+        run: pnpm tsx scripts/savehistoricaltranco.ts $(ls data/persisted-to-cache/*.csv | head -n 3)
